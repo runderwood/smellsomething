@@ -43,7 +43,7 @@ def leaks_list(psql):
     cur.execute("select id, title, description, created, modified, ST_AsText(location) from leak limit %s offset %s", (l,o))
     cols = ('id', 'title', 'description', 'created', 'modified', 'location')
     r = cur.fetchall()
-    leaks = [zip(cols,row) for row in r]
+    leaks = [dict(zip(cols,row)) for row in r]
     return {"leaks": leaks, "limit": l, "offset": o, "max_limit": max_limit, "min_limit": min_limit, "total": total}
 
 @app.post('/services/leaks')
