@@ -1,0 +1,54 @@
+#!/bin/bash
+
+while getopts "n:h:p:u:" opt; do
+    case $opt in
+        n)
+            echo "Set database name to ${OPTARG}..." >&2
+            dbname="${OPTARG}"
+            ;;
+        h)
+            ;;
+        p)
+            ;;
+        u)
+            echo "Set owner name to ${OPTARG}..." >&2
+            dbowner="${OPTARG}"
+            ;;
+        \?)
+            echo "Invalid argument: ${@}...(ignored)" >&2
+            ;;
+    esac;
+done;
+
+PSQL_CONTRIB="/usr/share/postgresql/8.4/contrib/"
+
+if [ `whoami` != "postgres" ]; then
+    echo "Must be run as postgres..."
+    exit 1
+fi
+
+if [ -z "${dbname}" ]; then
+    echo "Database name required."
+    exit 1
+fi
+
+if [ -z "${dbowner}" ]; then
+    echo "Database owner required."
+    exit 1
+fi
+
+#The first step in creating a PostGIS database is to create a simple PostgreSQL database.
+
+createdb "${dbname}"
+
+createlang plpgsql "${dbname}" 
+
+psql -d "${dbname}" -f "${PSQL_CONTRIB}postgis.sql"
+
+psql -d "${dbname}" -f "${PSQL_CONTRIB}spatial_ref_sys.sql"
+
+#psql -d "${dbname}" -f postgis_comments.sql
+
+createuser -DRlSP "${dbowner}"
+echo "alter database ${dbname} owner to \"${dbowner}\"; alter table geometry_columns owner to \"${dbowner}\"; alter table spatial_ref_sys owner to \"${dbowner}\"" | psql -d "${dbname}" 
+
