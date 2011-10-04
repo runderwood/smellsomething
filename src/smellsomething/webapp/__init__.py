@@ -1,4 +1,4 @@
-from bottle import Bottle, request, route, run, mako_view as view, mako_template as template, debug
+from bottle import Bottle, request, route, run, mako_view as view, mako_template as template, debug, HTTPError, abort, HTTPResponse, response
 from .config import Config, DevConfig
 import simplejson as json
 from .plugin.psql import PSQLPlugin
@@ -19,6 +19,10 @@ session_opts = {
 psqlplug = PSQLPlugin(dbhost=conf.dbhost,dbname=conf.dbname,dbuser=conf.dbuser,dbpass=conf.dbpass)
 app.install(psqlplug)
 
+def svcabort(status=500,error="Internal server error."):
+    response.status = status
+    return {'error': error}
+
 @app.route('/')
 def home():
     t = template('home')
@@ -34,23 +38,30 @@ def leaks_list(psql):
     min_limit = 10
     l = max(min_limit, min(max_limit, request.GET.get("l", max_limit)))
     o = int(request.GET.get("o", 0))
-    cur = psql.cursor()
-    cur.execute("select count(*) as total_leaks from leak")
-    tot_row = cur.fetchone()
-    total = 0
-    if tot_row:
-        total = tot_row[0]
-    cur.execute("select id, title, description, created, modified, ST_AsText(location) from leak limit %s offset %s", (l,o))
-    cols = ('id', 'title', 'description', 'created', 'modified', 'location')
-    r = cur.fetchall()
-    leaks = [dict(zip(cols,row)) for row in r]
+    from .model.leak import LeakModel
+    lm = LeakModel(db=psql)
+    total = lm.count()
+    leaks = lm.list(offset=o,limit=l)
     return {"leaks": leaks, "limit": l, "offset": o, "max_limit": max_limit, "min_limit": min_limit, "total": total}
 
 @app.post('/services/leaks')
 def add_leak(psql):
     # post json here
     # insert into leak (location) values (ST_GeomFromText('POINT(-126.4 45.32)', 4326))
-    return {"status": "ok", "location": "services/leaks/<id>"}
+    ct = request.headers.get("Content-Type", None)
+    if not ct or ct.strip().lower() != "application/json":
+        return svcabort(400, "JSON only.")
+    try:
+        data = json.loads(request.body.read())
+    except Exception as e:
+        raise HTTPError(400, "Bad data.", e)
+    from .model.leak import LeakModel
+    newleakid = False
+    try:
+        newleakid = LeakModel(db=psql).create(**data)
+    except Exception as e:
+        return svcabort(400, str(e))
+    return {"status": "ok", "location": "services/leaks/%d" % (newleakid,), "posted": data}
 
 
 app = SessionMiddleware(app, session_opts)

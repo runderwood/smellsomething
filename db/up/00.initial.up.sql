@@ -27,6 +27,7 @@ create table leak (
 );
 
 select AddGeometryColumn('leak', 'location', 4326, 'POINT', 2);
+alter table leak alter column location set not null;
 
 insert into leak (title, description, location) values ('Test One', 'A test.', ST_GeomFromText('POINT(-71.0 42.0)',4326));
 

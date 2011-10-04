@@ -60,7 +60,7 @@ class PSQLPlugin(object):
                     db.commit()
             except Exception as e:
                 db.rollback()
-                raise HTTPError(500, "Database Error", e)
+                raise HTTPError(500, "Internal Server Error", e)
             finally:
                 db.close()
             return rv
