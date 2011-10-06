@@ -1,0 +1,2 @@
+echo '{"title": "Hello, World", "location": "POINT(-72 41)"}' | curl -is -H "Content-Type: application/json" -X POST --data @- http://localhost:8787/services/leaks
+

@@ -1,0 +1,2 @@
+echo '{"title": "Hello, World (updated)(again)", "location": "POINT(-73 40)"}' | curl -is -H "Content-Type: application/json" -X PUT --data @- http://localhost:8787/services/leaks/11
+

@@ -7,6 +7,16 @@ from beaker.middleware import SessionMiddleware
 app = Bottle()
 conf = DevConfig()
 
+class StripPathMiddleware(object):
+    def __init__(self, app):
+        self.app = app
+
+    def __call__(self, e, h):
+        e['PATH_INFO'] = e['PATH_INFO'].rstrip('/')
+        return self.app(e,h)
+
+middleapp = StripPathMiddleware(app)
+
 debug(conf.debug)
 
 session_opts = {
@@ -46,8 +56,6 @@ def leaks_list(psql):
 
 @app.post('/services/leaks')
 def add_leak(psql):
-    # post json here
-    # insert into leak (location) values (ST_GeomFromText('POINT(-126.4 45.32)', 4326))
     ct = request.headers.get("Content-Type", None)
     if not ct or ct.strip().lower() != "application/json":
         return svcabort(400, "JSON only.")
@@ -61,7 +69,49 @@ def add_leak(psql):
         newleakid = LeakModel(db=psql).create(**data)
     except Exception as e:
         return svcabort(400, str(e))
-    return {"status": "ok", "location": "services/leaks/%d" % (newleakid,), "posted": data}
+    #response.status = 201
+    # location header?
+    return {"status": "ok", "location": "services/leaks/%d" % (newleakid,)}
+
+@app.get('/services/leaks/:leak_id')
+def get_leak(psql,leak_id=None):
+    from .model.leak import LeakModel
+    lm = LeakModel(db=psql)
+    leak = lm.read(id=leak_id)
+    if not leak:
+        return svcabort(404, 'Not found.')
+    return {"status": "ok", "leak": leak}
+
+@app.put('/services/leaks/:leak_id')
+def update_leak(psql,leak_id=None):
 
 
-app = SessionMiddleware(app, session_opts)
+    ct = request.headers.get("Content-Type", None)
+    if not ct or ct.strip().lower() != "application/json":
+        return svcabort(400, "JSON only.")
+    try:
+        data = json.loads(request.body.read())
+    except Exception as e:
+        raise HTTPError(400, "Bad data.", e)
+
+    from .model.leak import LeakModel
+    lm = LeakModel(db=psql)
+    leak = lm.read(id=leak_id)
+    if not leak:
+        return svcabort(404, 'Not found.')
+
+    for k in leak.keys():
+        leak[k] = data.get(k, leak[k])
+
+    updated = False
+    try:
+        updated = lm.update(**leak)
+    except Exception as e:
+        return svcabort(500, 'Could not update(1).')
+    if not updated:
+        return svcabort(500, 'Could not update(2).')
+    # status...
+    return {"status": "ok"}
+
+
+app = SessionMiddleware(middleapp, session_opts)
